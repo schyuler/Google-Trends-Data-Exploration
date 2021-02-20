@@ -1,0 +1,445 @@
+---
+title: "google-trends-analysis"
+author: "Schyuler Lujan"
+date: "2/20/2021"
+output: html_document
+---
+
+---
+title: "Data Exploration Project"
+author: "Schyuler Lujan"
+date: "2/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview of Project
+
+## Project description and research question
+
+## Data sources
+
+## Relevant variables
+
+# Load Relevant Libraries and Data
+
+```{r message = FALSE}
+# Load relevant libraries
+library(tidyverse)
+library(vtable)
+library(jtools)
+library(stringr)
+library(kableExtra)
+library(gridExtra)
+library(purrr)
+```
+
+When reading in the trends_up_to files, you may not explicitly write out every single one of the filenames. Instead, use list.files() with the pattern option to get a list of the trends_up_to_ files, and then read them in using a for() loop or (recommended) using map from the purrr package. In either case you will probably want to follow up with a bind_rows()
+
+```{r message = FALSE}
+# Set our working directory
+setwd("C:/Users/Tiny Moo Cow/OneDrive - Seattle University/OMSBA/Year 02/02 - Winter 2021/ECON 5300 Applied Econometrics/06 - Projects/Google-Trends-Data-Exploration")
+
+####### FIXME: Don't load in the files individually. #############
+# Load Google trends data
+trends01_df <- read.csv('./raw-data/trends_up_to_inter_1.csv')
+trends02_df <- read.csv("./raw-data/trends_up_to_inter_2.csv")
+trends03_df <- read.csv("./raw-data/trends_up_to_inter_3.csv")
+trends04_df <- read.csv("./raw-data/trends_up_to_inter_4.csv")
+trends05_df <- read.csv("./raw-data/trends_up_to_inter_5.csv")
+trends06_df <- read.csv("./raw-data/trends_up_to_inter_6.csv")
+trends07_df <- read.csv("./raw-data/trends_up_to_UM.csv")
+trends08_df <- read.csv("./raw-data/trends_up_to_UPhoenix.csv")
+trends09_df <- read.csv("./raw-data/trends_up_to_UT.csv")
+trends10_df <- read.csv("./raw-data/trends_up_to_UTMB.csv")
+trends11_df <- read.csv("./raw-data/trends_up_to_Yorktowne.csv")
+trends12_df <- read.csv("./raw-data/trends_up_to_finish.csv")
+
+# Load the scorecard data
+scorecard_raw_df <- read.csv("./raw-data/Most+Recent+Cohorts+(Scorecard+Elements).csv")
+
+# Load the linking table
+link_raw_df <- read.csv("./raw-data/id_name_link.csv")
+```
+
+# Data Cleanup
+
+## Linking Table
+
+```{r}
+# Find if there are rows where schname is duplicated
+link_df_duplicates <- data.frame(table(link_raw_df$schname)) %>% 
+  filter(Freq > 1) %>% 
+  rename(schname = Var1)
+
+# Remove all rows where schname is duplicated using anti-join
+link_df <- link_raw_df %>% 
+  anti_join(link_df_duplicates, by = "schname")
+
+# FIXME: Cleanup text on schname
+# str_trim(link_df$schname, side = c("both"))
+
+# Remove any null values from the data set
+link_df <- na.omit(link_df)
+
+# Rename our keys
+link_df <- link_df %>% 
+  rename(UNITID = unitid,
+         OPEID = opeid)
+
+# Check that the UNITID is unique -- this is our join key
+sum(duplicated(link_df$unitid))
+```
+
+## Scorecard
+
+```{r message = FALSE}
+# FIXME: Think of other variables to control for
+# Select only the relevant variables
+scorecard_df <- scorecard_raw_df %>% 
+  select(UNITID, OPEID, INSTNM, PREDDEG, md_earn_wne_p10.REPORTED.EARNINGS)
+
+# Rename our earnings variable
+scorecard_df <- scorecard_df %>% 
+  rename(median_earnings_p10 = md_earn_wne_p10.REPORTED.EARNINGS)
+
+# Filter on PREDDEG to only show schools where PREDDEG == 3
+# Remove schools where earnings info was suppressed due to privacy concerns
+scorecard_df <- scorecard_df %>% 
+  filter(PREDDEG == 3,
+         median_earnings_p10 != 'PrivacySuppressed') %>% 
+  select(-PREDDEG)
+
+# Change our median_earnings_p10 variable from string to numeric
+scorecard_df <- scorecard_df %>% 
+  mutate(median_earnings_p10 = as.numeric(median_earnings_p10))
+
+# Remove null values from the data set
+scorecard_df <- na.omit(scorecard_df)
+
+# Check that the UNITID is unique -- this is our join key
+sum(duplicated(scorecard_df$UNITID))
+```
+
+## Google Trends
+
+In our analysis, the index will be our dependent variable. Indexes for keywords cannot be compared, so we must standardize the index within each keyword. We will summarize the index for each school by taking the average of the index for the month.
+
+```{r}
+# FIXME: needs to change once I load the files in differently
+# Combine Google trends data into a single df with a vertical merge
+google_trends_df <- rbind(trends01_df, 
+                          trends02_df,
+                          trends03_df,
+                          trends04_df,
+                          trends05_df,
+                          trends06_df,
+                          trends07_df,
+                          trends08_df,
+                          trends09_df,
+                          trends10_df,
+                          trends11_df,
+                          trends12_df)
+
+# FIXME: Text cleanup on schname - trim and clean
+
+# Remove nulls
+google_trends_df <- na.omit(google_trends_df)
+
+# 
+
+# Create our standardized index by keyword
+google_trends_df <- google_trends_df %>% 
+  group_by(keyword) %>% 
+  mutate(std_index = (index - mean(index)) / sd(index) )
+```
+
+## Joining Tables
+
+```{r}
+# Join the link_df and scorecard_df with an inner join
+join1_df <- link_df %>% 
+  inner_join(scorecard_df, by = "UNITID") %>% 
+  select(-OPEID.x) %>% 
+  rename(OPEID = OPEID.y)
+
+# Join the join1_df with our google_trends_df
+final_df <- join1_df %>% 
+  inner_join(google_trends_df, by = "schname") %>% 
+  select(-schname, -OPEID)
+```
+
+
+## Create Additional Variables
+
+We will add some additional variables to better facilitate our analysis. Since we want to see if the scorecard had an effect on a college's index, we will want to compare the effects before and after the scorecard was published.
+
+Additionally, we need to split our colleges into low and high income groups. For this, we will calculate the median income of the colleges in our data set. Any colleges that are above the median we will consider to be high income colleges. And any colleges below the median will be considered as low income colleges.
+
+The additional variables we will create are as follows:
+
+- Scorecard_Published: A Categorical variable that will take a value of 1 if the index occured after the scorecard was published, and a value of 0 if the variable occured before the scorecard was published
+- High Income: A categorical variable that will take the value of 1 if the school is in the high income group and 0 if it is in the low income group.
+
+### Create scorecard published variable
+
+```{r}
+# Cleanup of dates, duplicate month or week field and split column on " - "
+# Convert the date fields from string to date format
+final_df <- final_df %>% 
+  separate(monthorweek, c("begdate", "enddate"), " - ") %>% 
+  mutate(begdate = as.Date(begdate),
+         enddate = as.Date(enddate))
+
+# If the begdate falls before 9/1/15, it takes a value of 0; otherwise a value of 1
+final_df <- final_df %>% 
+  mutate(scorecard_published = ifelse(begdate < as.Date("2015-09-01"), 0, 1),
+         scorecard_published = as.factor(scorecard_published))
+
+# Create dummy variables for seasons
+final_df <- final_df %>% 
+  mutate(month = as.numeric(format(begdate, format = "%m")),
+         winter = as.factor(ifelse(month < 4, 1, 0)),
+         spring = as.factor(ifelse(month == 4 | month == 5 | month == 6, 1, 0)),
+         summer = as.factor(ifelse(month == 7 | month == 8 | month == 9, 1, 0)),
+         fall = as.factor(ifelse(month > 9, 1, 0))
+  )
+
+# Check if all colleges in our data set have data both before and after scorecard release
+# If any colleges don't have data after the scorecard release, then remove them
+check_before_after <- final_df %>% 
+  group_by(scorecard_published, INSTNM) %>% 
+  summarise(n = n()) %>% 
+  pivot_wider(names_from = scorecard_published, values_from = n)
+```
+
+### Create high income group variable
+
+```{r}
+# First, look at the median incomes for the colleges in our data set
+median_earnings_df <- final_df %>% 
+  group_by(INSTNM, median_earnings_p10) %>% 
+  summarise(earnings = mean(median_earnings_p10))
+
+# Calculate the overall median earnings for our data set
+
+overall_median <- median(median_earnings_df$earnings)
+
+# If the income is above the median, the college is considered high income and gets a value of 1
+# Else, the college is considered low income and gets a value of 0
+final_df <- final_df %>% 
+  mutate(high_income = ifelse(median_earnings_p10 > overall_median, 1, 0),
+         high_income = as.factor(high_income))
+```
+
+### Summarise our Index by College and Week
+
+We want our final data set to have one value for each school per week.
+
+```{r}
+# Do our final grouping of our data by college and week
+final_df <- final_df %>% 
+  group_by(INSTNM, begdate, median_earnings_p10, high_income, scorecard_published, winter, spring, summer, fall) %>% 
+  summarise(avg_std_index = mean(std_index))
+```
+
+# Exploratory Analysis - Univariate Analysis
+
+## Summary Statistics
+
+```{r}
+summary(final_df)
+```
+
+## Graphical Analysis
+
+### Index
+
+```{r}
+# Create a boxplot and histogram for the index
+grid.arrange( 
+ggplot(data = final_df,
+       mapping = aes(x = 1,
+                     y = avg_std_index)) +
+  geom_boxplot() +
+  ggtitle('Standardized Index') +
+  coord_flip(),
+
+ggplot(data = final_df,
+       mapping = aes(x = avg_std_index)) +
+  geom_histogram() +
+  ggtitle('Standardized Index'),
+
+ncol = 1)
+```
+
+### Median Earnings
+
+```{r}
+# Create a boxplot and histogram for median earnings
+grid.arrange( 
+ggplot(data = final_df,
+       mapping = aes(x = 1,
+                     y = median_earnings_p10)) +
+  geom_boxplot() +
+  ggtitle('Median Earnings 10 Years After Entry') +
+  coord_flip(),
+
+ggplot(data = final_df,
+       mapping = aes(x = median_earnings_p10)) +
+  geom_histogram() +
+  ggtitle('Median Earnings 10 Years After Entry'),
+
+ncol = 1)
+```
+
+### Scorecard Published
+
+```{r}
+# Create bar graph for scorecard published
+ggplot(data = final_df,
+       mapping = aes(x = scorecard_published)) +
+  geom_bar() +
+  ggtitle('Number of Observations Before and After Scorecard Publication')
+```
+
+Majority of our data set comes from before the scorecard was published.
+
+# Exploratory Analysis - Multivariate Analysis
+
+## Trends Over Time
+
+```{r}
+# Look at high and low income over time, across all time periods
+final_df %>% 
+  group_by(begdate, high_income) %>% 
+  summarise(average_index = mean(avg_std_index)) %>% 
+  ggplot(mapping = aes(x = begdate, y = average_index, color = high_income)) +
+  geom_point() +
+  ggtitle('Average Standardized Index for High and Low Income Schools')
+
+# Look at high and low income over time, but only after 9/1/15
+final_df %>% 
+  filter(scorecard_published == 1) %>% 
+  group_by(begdate, high_income) %>% 
+  summarise(average_index = mean(avg_std_index)) %>% 
+  ggplot(mapping = aes(x = begdate, y = average_index, color = high_income)) +
+  geom_point() +
+  ggtitle('Average Standardized Index After Scorecard Publication')
+```
+
+Overall, there appears to be seasonal cycle for both low and high income schools on a yearly basis. The average standard index trends downward from beginning to mid-year, and then increases from mid-year to the end of the year. Additionally, low and high earnings colleges don't appear to have pronounced differences when looking overall, across all time periods.
+
+Additionally, there appears to be an overall downward trend after the publication of the scorecard. However, this may be due to a seasonal effect rather than just the scorecard itself.
+
+## Seasonal Effects
+
+Our scatterplot shows seasonal trends, so we will examine each season within a year more closely to see if we can find any notable differences.
+
+```{r}
+# Look at any overall seasonal differences
+final_df %>% 
+  mutate(season = ifelse(winter == 1, 'winter', 
+                         ifelse(spring == 1, 'spring',
+                                ifelse(summer == 1, 'summer', 'fall')))) %>% 
+  group_by(season) %>% 
+  summarise(average_index = mean(avg_std_index))
+
+# Compare boxplots by season
+ final_df %>% 
+  mutate(season = ifelse(winter == 1, 'winter', 
+                         ifelse(spring == 1, 'spring',
+                                ifelse(summer == 1, 'summer', 'fall')))) %>% 
+  group_by(season) %>% 
+  ggplot(mapping = aes(x = season, y = avg_std_index)) +
+  geom_boxplot() +
+  ggtitle('Standardized Index by Season') +
+  coord_flip()
+```
+
+When looking at overall seasonal differences, summer has the highest average. It is possible that summer has the highest average because it is the season right before students start applying to colleges. Therefore, students may be looking up colleges more frequently in preparation for the college application cycle for fall and winter. 
+
+## Season and Earnings Level
+
+Since there are clear seasonal differences, there might be pronounced seasonal differences according to the earnings level of the school.
+
+```{r}
+# Look at any seasonal differences by earnings level
+final_df %>% 
+  mutate(season = ifelse(winter == 1, 'winter', 
+                         ifelse(spring == 1, 'spring',
+                                ifelse(summer == 1, 'summer', 'fall')))) %>%
+  group_by(season, high_income) %>% 
+  summarise(average_index = mean(avg_std_index)) %>% 
+  pivot_wider(names_from = high_income, values_from = average_index)
+
+# Compare boxplots by season and income level
+ final_df %>% 
+  mutate(season = ifelse(winter == 1, 'winter', 
+                         ifelse(spring == 1, 'spring',
+                                ifelse(summer == 1, 'summer', 'fall')))) %>% 
+  group_by(season, high_income) %>% 
+  ggplot(mapping = aes(x = high_income, y = avg_std_index)) +
+  geom_boxplot() +
+  coord_flip() +
+  facet_grid(season ~.)
+```
+
+Again, summer shows the highest values for both high and low earnings schools. And the average standardized index is slightly higher for low-earnings colleges than for high-earnings colleges in summer.
+
+```{r}
+# Look at high and low income over time for summer season only
+final_df %>% 
+  filter(summer == 1) %>% 
+  group_by(begdate, high_income) %>% 
+  summarise(average_index = mean(avg_std_index)) %>% 
+  ggplot(mapping = aes(x = begdate, y = average_index, color = high_income)) +
+  geom_point() +
+  ggtitle('Average Standardized Index for High and Low Income Schools in Summer')
+
+# Look at high and low income over time for all other seasons
+final_df %>% 
+  filter(summer == 0) %>% 
+  group_by(begdate, high_income) %>% 
+  summarise(average_index = mean(avg_std_index)) %>% 
+  ggplot(mapping = aes(x = begdate, y = average_index, color = high_income)) +
+  geom_point() +
+  ggtitle('Average Standardized Index for High and Low Income Schools: Other Seasons')
+
+```
+
+Scatterplots by season reveal an upward trend in summertime for both high and low earnings colleges. All other seasons have a downward trend.
+
+After exploratory analysis, the following appear to be likely:
+
+- Being a high or low earnings college (on its own) does not appear to have any strong association with the standardized index
+- Season (ie: fall, winter, spring, summer) appears to have a strong association with the average index, with summer being the time where all colleges are searched more often. However, within season there still don't appear to be any pronounced differences between high and low earnings colleges
+- Scorecard was published at the end of summer / beginning of fall. So any negative associations between the scorecard and the standardized index could be due to the seasonality, the scorecard, or a combination of both.
+
+# Regression Model
+
+```{r}
+# First regression model
+reg1 <- lm(avg_std_index ~ high_income + scorecard_published, data = final_df)
+#reg1 <- lm(avg_std_index ~ high_income + scorecard_published, data = final_df2)
+
+# Second regression model, with seasonal dummy variables
+reg2 <- lm(avg_std_index ~ high_income + scorecard_published + fall + winter + spring, data = final_df)
+#reg2 <- lm(avg_std_index ~ high_income + scorecard_published + fall + winter + spring, data = final_df2)
+
+# Third regression model, with interaction between high_income and scorecard_published
+reg3 <- lm(avg_std_index ~ high_income + scorecard_published + high_income*scorecard_published + fall + winter + spring, data = final_df)
+#reg3 <- lm(avg_std_index ~ high_income + scorecard_published + high_income*scorecard_published + fall + winter + spring, data = final_df2)
+
+# View all four models together and compare
+export_summs(reg1, reg2, reg3)
+```
+
+# Conclusions
+
+```{r}
+
+```
