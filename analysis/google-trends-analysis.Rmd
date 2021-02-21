@@ -28,34 +28,30 @@ For our data we are using the following:
 ```{r message = FALSE, warning = FALSE}
 # Load relevant libraries
 library(tidyverse)
+library(kableExtra)
 library(vtable)
 library(jtools)
 library(stringr)
-library(kableExtra)
 library(gridExtra)
 library(purrr)
 ```
 
 ## Load Raw Data
 
+list.files() with the pattern option to get a list of the trends_up_to_ files, and then read them in using a for() loop or (recommended) using map from the purrr package. In either case you will probably want to follow up with a bind_rows().
+You can isolate the first ten characters of a variable x using str_sub(x,1,10). Just sayin’.
+
 ```{r message = FALSE, warning = FALSE}
 # Set our working directory
-setwd("C:/Users/Tiny Moo Cow/OneDrive - Seattle University/OMSBA/Year 02/02 - Winter 2021/ECON 5300 Applied Econometrics/06 - Projects/Google-Trends-Data-Exploration")
+setwd()
 
-####### FIXME: Don't load in the files individually. #############
-# Load Google trends data
-trends01_df <- read.csv('./raw-data/trends_up_to_inter_1.csv')
-trends02_df <- read.csv("./raw-data/trends_up_to_inter_2.csv")
-trends03_df <- read.csv("./raw-data/trends_up_to_inter_3.csv")
-trends04_df <- read.csv("./raw-data/trends_up_to_inter_4.csv")
-trends05_df <- read.csv("./raw-data/trends_up_to_inter_5.csv")
-trends06_df <- read.csv("./raw-data/trends_up_to_inter_6.csv")
-trends07_df <- read.csv("./raw-data/trends_up_to_UM.csv")
-trends08_df <- read.csv("./raw-data/trends_up_to_UPhoenix.csv")
-trends09_df <- read.csv("./raw-data/trends_up_to_UT.csv")
-trends10_df <- read.csv("./raw-data/trends_up_to_UTMB.csv")
-trends11_df <- read.csv("./raw-data/trends_up_to_Yorktowne.csv")
-trends12_df <- read.csv("./raw-data/trends_up_to_finish.csv")
+# Get our list of files
+file_list <- list.files(path = './raw-data/', pattern = 'trends_up_to_', full.names = TRUE)
+
+# Load the Google trends data
+google_trends_raw_df <- file_list %>%
+  map(read_csv) %>%
+  bind_rows()
 
 # Load the scorecard data
 scorecard_raw_df <- read.csv("./raw-data/Most+Recent+Cohorts+(Scorecard+Elements).csv")
@@ -122,22 +118,9 @@ sum(duplicated(scorecard_df$UNITID))
 In our analysis, the index will be our dependent variable. Indexes for keywords cannot be compared, so we must standardize the index within each keyword.
 
 ```{r message = FALSE, warning = FALSE}
-# Combine Google trends data into a single df with a vertical merge
-google_trends_df <- rbind(trends01_df, 
-                          trends02_df,
-                          trends03_df,
-                          trends04_df,
-                          trends05_df,
-                          trends06_df,
-                          trends07_df,
-                          trends08_df,
-                          trends09_df,
-                          trends10_df,
-                          trends11_df,
-                          trends12_df)
-
 # Remove nulls
-google_trends_df <- na.omit(google_trends_df)
+google_trends_df <- google_trends_raw_df %>%
+  na.omit(google_trends_df)
 
 # Create our standardized index by keyword
 google_trends_df <- google_trends_df %>% 
@@ -438,7 +421,7 @@ reg2 <- lm(avg_std_index ~ high_income + scorecard_published + summer, data = fi
 reg3 <- lm(avg_std_index ~ high_income + scorecard_published + summer + scorecard_published*high_income, data = final_df)
 
 # Fourth regression model, using fixed effects controlling for differences between seasons
-reg4 <- lm(avg_std_index ~ high_income + scorecard_published + scorecard_published*high_income + factor(season), data = final_df)
+reg4 <- lm(avg_std_index ~ high_income + scorecard_published + scorecard_published*high_income + summer + fall + spring, data = final_df)
 
 # View all four models together and compare
 export_summs(reg1, reg2, reg3, reg4)
