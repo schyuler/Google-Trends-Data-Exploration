@@ -9,43 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-In September 2015, the college scorecard was published, which shows information about colleges in the United States and their graduated students. What impact has this scorecard had on colleges? Specifically, in this analysis, I answer the following question:
-
-Among colleges that predominantly grant bachelor’s degrees, did it result in more student interest in high-earnings colleges relative to low-earnings ones?
-
-### Data Used
-
-To answer this research question I used the following data sets:
-
-- Google trends data that shows the keyword searches and indexes for each keyword associated with each college from 3/24/2013 to 3/27/2016
-- College Scorecard data
-- Linking table for joining the Google trends data with the scorecard
-
-### Data Preparation
-
-To prepare the data for analysis, I made the following key decisions in my data preparation process:
-
-- Removed schools with the same school name to avoid issues with joining the Google Trends and College Scorecard data sets.
-
-- Removed schools with null values in their index or date fields, since these fields are required in the analysis.
-
-- Standardized the index values in the Google trends data based upon each keyword associated with a school. This allows us to compare index values across keywords and schools.
-
-- Grouped the standardized index values by school name and week by returning the school's overall average standardized index value for each week. This gives us clearer information about the school's overall standardized trend index at each point in time.
-
-
-### Variables in Regression Model
-
-For my analysis, I identified the following variables for inclusion in my final model:
-
-- Scorecard Published: This variable indicates if the data was captured before or after the scorecard was published. 
-
-- Season: Overall interest in colleges vary throughout a calendar year due to the college application windows being open for specific periods of time. I thought it likely that there would be differences in interest according to the time of year. Therefore, I included variables for winter, spring, summer, and fall to capture this variation.
-
-- High Income: I divided all the colleges into two groups based upon the reported median earnings of their students 10 years after entry. These groups are "high income" and "low income". High income schools reported earnings above the median, while low income schools are at or below the median. I grouped the schools in this way to utilize all of the data in our data set.
-
-### Conclusions
-
 ```{r include = FALSE}
 # Load relevant libraries
 library(tidyverse)
@@ -79,23 +42,58 @@ my_theme <- theme(panel.border = element_blank(),
         )
 ```
 
-```{r echo = FALSE}
-# Look at high and low income over time, but only after 9/1/15
-final_df %>% 
-  filter(scorecard_published == 1) %>% 
-  mutate(Earnings = ifelse(high_income == 0, "Low Earnings School", "High Earnings School")) %>%
-  group_by(begdate, Earnings) %>% 
-  summarise(average_index = mean(avg_std_index)) %>% 
-  ggplot(mapping = aes(x = begdate, y = average_index, color = Earnings)) +
-  geom_point() +
-  my_theme +
-  labs(title = "Average Standardized Index After Scorecard Publication",
-       subtitle = "Differences between low and high earnings schools are small",
-       x = "Date",
-       y = "Average Standardized Index") +
-  scale_color_manual(values = c("Low Earnings School" = "#002060", "High Earnings School" = "#d6dee1")) +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
+In September 2015, the college scorecard was published, which shows information about colleges in the United States and their graduated students. What impact has this scorecard had on colleges? Specifically, in this analysis, I answer the following question:
+
+Among colleges that predominantly grant bachelor’s degrees, did it result in more student interest in high-earnings colleges relative to low-earnings ones?
+
+### Data Used
+
+To answer this research question I used the following data sets:
+
+- Google trends data that shows the keyword searches and indexes for each keyword associated with each college from 3/24/2013 to 3/27/2016
+- College Scorecard data
+- Linking table for joining the Google trends data with the scorecard
+
+### Data Preparation
+
+To prepare the data for analysis, I made the following key decisions in my data preparation process:
+
+- Removed schools that do not predominantly grant bachelor degrees.
+
+- Removed schools with the same school name to avoid issues with joining the Google Trends and College Scorecard data sets.
+
+- Removed schools with null values in their index or date fields, since these fields are required in the analysis.
+
+- Standardized the index values in the Google trends data based upon each keyword associated with a school. This allows us to compare index values across keywords and schools.
+
+- Grouped the standardized index values by school name and week by returning the school's overall average standardized index value for each week. This gives us clearer information about the school's overall standardized trend index at each point in time.
+
+
+### Variables in Regression Model
+
+For my analysis, I identified the following variables for inclusion in my final model:
+
+- Scorecard Published: This variable indicates if the data was captured before or after the scorecard was published. 
+
+- Season: Overall interest in colleges vary throughout a calendar year due to the college application windows being open for specific periods of time. I thought it likely that there would be differences in interest according to the time of year. Therefore, I included variables for winter, spring, summer, and fall to control for this seasonal variation.
+
+- High Income: I divided all the colleges into two groups based upon the reported median earnings of their students 10 years after entry. These groups are "high income" and "low income". High income schools reported earnings above the median, while low income schools are at or below the median. I grouped the schools in this way to utilize all of the data in our data set.
+
+
+### Results
+
+Holding all else constant, a college with high earnings with the college scorecard is associated with an estimated -0.28 decrease on the average standardized index. In comparison, holding all else constant a college with low earnings with the college scorecard is associated with an estimated -0.24 decrease on the average standardized index. The relationship between earnings level and scorecard publication to the average standardized index are statistically significant, but the difference in the estimated effect between low and high earnings colleges is not substantial.
+
+Additionally, holding all else constant, a high earnings college is associated with an estimated 0.01 increase in its average standardized index, when compared with low earnings colleges. While this is also statistically significant, the effect is also insubstantial. 
+
+Finally, my analysis shows that seasonality has a statistically significant and material impact on searches. Holding all else constant, a search during summer is associated with an estimated 0.10 increase in the average standardized index. 
+
+```{r echo = FALSE, message = FALSE}
+# Build final model
+reg4 <- lm(avg_std_index ~ high_income + scorecard_published + summer + fall + spring + high_income*scorecard_published, data = final_df)
+
+# Display results of final regression model
+export_summs(reg4)
 ```
 
 ```{r echo = FALSE, message = FALSE}
@@ -116,13 +114,9 @@ final_df %>%
         axis.ticks.x = element_blank())
 ```
 
-```{r echo = FALSE}
-# Build final model
-reg4 <- lm(avg_std_index ~ high_income + scorecard_published + scorecard_published*high_income + winter + summer + spring, data = final_df)
+### Conclusions
 
-# Display results of final regression model
-export_summs(reg4)
-```
+Overall, my analysis shows that the scorecard publication did not result in substantially different interest in colleges reporting higher earnings when compared to colleges reporting lower earnings. Additionally, searches are generally higher than average during summer when compared with all other seasons. This suggests that schools should be more attuned to the impact of the time of year than the college scorecard in their search trends.
 
 
 
